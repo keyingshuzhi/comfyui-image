@@ -60,4 +60,4 @@ RUN mkdir -p /opt/ComfyUI/models /opt/ComfyUI/input /opt/ComfyUI/output \
 
 EXPOSE 8188
 
-CMD ["python", "main.py", "--cpu", "0.0.0.0", "--port", "8188"]
+CMD ["python", "main.py", "--cpu", "--listen", "--port", "8188"]
