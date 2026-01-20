@@ -1,8 +1,8 @@
-# comfyui-image: CPU baseline image
+# comfyui-image: CPU baseline (mac/docker friendly)
 # - Builds ComfyUI from an upstream tag/commit (COMFYUI_REF)
-# - Keeps runtime minimal; models/nodes/workflows are mounted at runtime via volumes
+# - Keeps runtime minimal; models/nodes/workflows are mounted via volumes
 
-ARG BASE_IMAGE=python:3.12-slim
+ARG BASE_IMAGE=python:3.11-slim
 FROM ${BASE_IMAGE}
 
 ARG COMFYUI_REF=v0.9.2
@@ -10,7 +10,7 @@ ARG COMFYUI_REPO=https://github.com/Comfy-Org/ComfyUI.git
 
 LABEL org.opencontainers.image.source="https://github.com/keyingshuzhi/comfyui-image"
 
-# System deps
+# System deps (minimal but practical)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     ffmpeg \
@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user and workspace
+# Non-root user
 RUN useradd -m -u 1000 app \
   && mkdir -p /opt \
   && chown -R app:app /opt
@@ -27,9 +27,7 @@ RUN useradd -m -u 1000 app \
 USER app
 WORKDIR /opt
 
-# Fetch upstream source (robust for tags like v0.9.2)
-# 1) Try shallow clone by tag/branch (fast, stable for release tags)
-# 2) Fallback to full clone + checkout for commit hashes or unusual refs
+# Fetch upstream source (robust for release tags like v0.9.2)
 RUN set -eux; \
   rm -rf /opt/ComfyUI; \
   if git clone --depth 1 --branch "${COMFYUI_REF}" "${COMFYUI_REPO}" /opt/ComfyUI; then \
@@ -49,7 +47,11 @@ WORKDIR /opt/ComfyUI
 # Keep pip tooling updated
 RUN pip install --no-cache-dir -U pip setuptools wheel
 
-# Install python deps (CPU baseline)
+# IMPORTANT: Install CPU-only PyTorch first (prevents pulling CUDA/nvidia wheels)
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu \
+    torch torchvision torchaudio
+
+# Install ComfyUI deps (should reuse the already-installed CPU torch)
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Runtime directories (bind mounts recommended)
