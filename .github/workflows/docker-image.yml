@@ -19,6 +19,8 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_REPO: comfyui
+  # Ensure we always build from the official org repo (where release tags like v0.9.2 exist)
+  COMFYUI_REPO: https://github.com/Comfy-Org/ComfyUI.git
 
 jobs:
   build:
@@ -65,6 +67,7 @@ jobs:
           echo "SHA_TAG=sha-${SHORT_SHA}" >> "$GITHUB_ENV"
 
           echo "[vars] IMAGE=${{ env.REGISTRY }}/${OWNER_LC}/${{ env.IMAGE_REPO }}"
+          echo "[vars] COMFYUI_REPO=${{ env.COMFYUI_REPO }}"
           echo "[vars] COMFYUI_REF=${REF_INPUT}"
           echo "[vars] SAFE_TAG=${SAFE_TAG}"
           echo "[vars] SHA_TAG=sha-${SHORT_SHA}"
@@ -88,6 +91,7 @@ jobs:
             --platform linux/amd64 \
             --file docker/Dockerfile \
             --build-arg COMFYUI_REF="${COMFYUI_REF}" \
+            --build-arg COMFYUI_REPO="${COMFYUI_REPO}" \
             --tag "${IMAGE}:${SAFE_TAG}" \
             --load \
             .
@@ -105,6 +109,7 @@ jobs:
             --platform linux/amd64 \
             --file docker/Dockerfile \
             --build-arg COMFYUI_REF="${COMFYUI_REF}" \
+            --build-arg COMFYUI_REPO="${COMFYUI_REPO}" \
             --tag "${IMAGE}:${SAFE_TAG}" \
             --tag "${IMAGE}:${SHA_TAG}" \
             --cache-from type=gha \
@@ -120,6 +125,7 @@ jobs:
             --platform linux/amd64 \
             --file docker/Dockerfile \
             --build-arg COMFYUI_REF="${COMFYUI_REF}" \
+            --build-arg COMFYUI_REPO="${COMFYUI_REPO}" \
             --tag "${IMAGE}:edge" \
             --cache-from type=gha \
             --cache-to type=gha,mode=max \
@@ -127,12 +133,13 @@ jobs:
             .
 
       - name: Tag & Push stable (optional, dispatch only)
-        if: ${{ github.event_name == 'workflow_dispatch' && env.PUSH_STABLE == 'true' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.push_stable == 'true' }}
         run: |
           docker buildx build \
             --platform linux/amd64 \
             --file docker/Dockerfile \
             --build-arg COMFYUI_REF="${COMFYUI_REF}" \
+            --build-arg COMFYUI_REPO="${COMFYUI_REPO}" \
             --tag "${IMAGE}:stable" \
             --cache-from type=gha \
             --cache-to type=gha,mode=max \
