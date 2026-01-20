@@ -6,7 +6,8 @@ ARG BASE_IMAGE=python:3.12-slim
 FROM ${BASE_IMAGE}
 
 ARG COMFYUI_REF=v0.9.2
-ARG COMFYUI_REPO=https://github.com/comfyanonymous/ComfyUI.git
+# FIX: use the upstream org repo that contains release tags like v0.9.2
+ARG COMFYUI_REPO=https://github.com/Comfy-Org/ComfyUI.git
 
 # OCI label so GHCR package links back to this repository
 LABEL org.opencontainers.image.source="https://github.com/keyingshuzhi/comfyui-image"
@@ -28,13 +29,18 @@ RUN useradd -m -u 1000 app \
 WORKDIR /opt/ComfyUI
 
 # Fetch only the requested ref to keep the image small
+# FIX: fetch tags explicitly with refspec (shallow tag fetch is otherwise flaky)
 RUN set -eux; \
   git init .; \
   git remote add origin "${COMFYUI_REPO}"; \
-  if git fetch --depth 1 origin "${COMFYUI_REF}"; then \
+  \
+  # 1) Prefer tags (stable releases)
+  if git fetch --depth 1 origin "refs/tags/${COMFYUI_REF}:refs/tags/${COMFYUI_REF}"; then \
+    git checkout --detach "${COMFYUI_REF}"; \
+  # 2) Try branch name
+  elif git fetch --depth 1 origin "refs/heads/${COMFYUI_REF}:refs/remotes/origin/${COMFYUI_REF}"; then \
     git checkout --detach FETCH_HEAD; \
-  elif git fetch --depth 1 origin "refs/tags/${COMFYUI_REF}"; then \
-    git checkout --detach FETCH_HEAD; \
+  # 3) Fallback: commit hash or other refs (may require deeper fetch)
   else \
     git fetch --all --tags; \
     git checkout --detach "${COMFYUI_REF}"; \
