@@ -31,8 +31,14 @@ WORKDIR /opt/ComfyUI
 RUN set -eux; \
   git init .; \
   git remote add origin "${COMFYUI_REPO}"; \
-  git fetch --depth 1 origin "${COMFYUI_REF}"; \
-  git checkout --detach FETCH_HEAD; \
+  if git fetch --depth 1 origin "${COMFYUI_REF}"; then \
+    git checkout --detach FETCH_HEAD; \
+  elif git fetch --depth 1 origin "refs/tags/${COMFYUI_REF}"; then \
+    git checkout --detach FETCH_HEAD; \
+  else \
+    git fetch --all --tags; \
+    git checkout --detach "${COMFYUI_REF}"; \
+  fi; \
   rm -rf .git
 
 # Optional: keep pip tooling updated (safe, small)
