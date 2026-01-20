@@ -6,7 +6,7 @@ ARG BASE_IMAGE=python:3.12-slim
 FROM ${BASE_IMAGE}
 
 ARG COMFYUI_REF=v0.9.2
-# FIX: use the upstream org repo that contains release tags like v0.9.2
+# IMPORTANT: use the upstream repo that contains releases/tags like v0.9.2
 ARG COMFYUI_REPO=https://github.com/Comfy-Org/ComfyUI.git
 
 # OCI label so GHCR package links back to this repository
@@ -29,18 +29,26 @@ RUN useradd -m -u 1000 app \
 WORKDIR /opt/ComfyUI
 
 # Fetch only the requested ref to keep the image small
-# FIX: fetch tags explicitly with refspec (shallow tag fetch is otherwise flaky)
+# FIX: handle annotated tags by fetching the peeled commit (refs/tags/<tag>^{})
 RUN set -eux; \
   git init .; \
   git remote add origin "${COMFYUI_REPO}"; \
   \
-  # 1) Prefer tags (stable releases)
-  if git fetch --depth 1 origin "refs/tags/${COMFYUI_REF}:refs/tags/${COMFYUI_REF}"; then \
-    git checkout --detach "${COMFYUI_REF}"; \
-  # 2) Try branch name
+  # 1) Try "peeled" tag commit (works for annotated & lightweight tags)
+  if git fetch --depth 1 origin "refs/tags/${COMFYUI_REF}^{ }"; then \
+    git checkout --detach FETCH_HEAD; \
+  elif git fetch --depth 1 origin "refs/tags/${COMFYUI_REF}^{}"; then \
+    git checkout --detach FETCH_HEAD; \
+  \
+  # 2) Try lightweight tag refspec
+  elif git fetch --depth 1 origin "refs/tags/${COMFYUI_REF}:refs/tags/${COMFYUI_REF}"; then \
+    git checkout --detach FETCH_HEAD; \
+  \
+  # 3) Try branch
   elif git fetch --depth 1 origin "refs/heads/${COMFYUI_REF}:refs/remotes/origin/${COMFYUI_REF}"; then \
     git checkout --detach FETCH_HEAD; \
-  # 3) Fallback: commit hash or other refs (may require deeper fetch)
+  \
+  # 4) Fallback: full fetch (for commit hashes or unusual refs)
   else \
     git fetch --all --tags; \
     git checkout --detach "${COMFYUI_REF}"; \
@@ -62,6 +70,4 @@ USER app
 
 EXPOSE 8188
 
-# Notes:
-# - By default we listen on 0.0.0.0 inside container. Control exposure via compose port binding.
 CMD ["python", "main.py", "--listen", "0.0.0.0", "--port", "8188"]
