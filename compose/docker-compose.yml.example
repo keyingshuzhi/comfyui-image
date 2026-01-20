@@ -1,0 +1,16 @@
+services:
+  comfyui:
+    image: ${COMFYUI_IMAGE:-ghcr.io/keyingshuzhi/comfyui:stable}
+    container_name: comfyui
+    # 安全建议：本机使用只绑定到 127.0.0.1
+    ports:
+      - "127.0.0.1:8188:8188"
+    # Runtime data stays on the host so image upgrades do not overwrite it.
+    volumes:
+      - ./runtime/models:/opt/ComfyUI/models
+      - ./runtime/input:/opt/ComfyUI/input
+      - ./runtime/output:/opt/ComfyUI/output
+      # 你如果要挂载自定义节点/工作流，在 deploy 仓做
+      # - ./runtime/custom_nodes:/opt/ComfyUI/custom_nodes
+      # - ./runtime/workflows:/opt/ComfyUI/workflows
+    restart: unless-stopped
