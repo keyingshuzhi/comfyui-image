@@ -6,13 +6,11 @@ ARG BASE_IMAGE=python:3.12-slim
 FROM ${BASE_IMAGE}
 
 ARG COMFYUI_REF=v0.9.2
-# IMPORTANT: use the upstream repo that contains releases/tags like v0.9.2
 ARG COMFYUI_REPO=https://github.com/Comfy-Org/ComfyUI.git
 
-# OCI label so GHCR package links back to this repository
 LABEL org.opencontainers.image.source="https://github.com/keyingshuzhi/comfyui-image"
 
-# Basic runtime deps commonly needed by comfyui + image libs
+# System deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     ffmpeg \
@@ -21,52 +19,42 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user and prepare workspace
+# Create non-root user and workspace
 RUN useradd -m -u 1000 app \
-  && mkdir -p /opt/ComfyUI \
-  && chown -R app:app /opt/ComfyUI
+  && mkdir -p /opt \
+  && chown -R app:app /opt
 
-WORKDIR /opt/ComfyUI
+USER app
+WORKDIR /opt
 
-# Fetch only the requested ref to keep the image small
-# FIX: handle annotated tags by fetching the peeled commit (refs/tags/<tag>^{})
+# Fetch upstream source (robust for tags like v0.9.2)
+# 1) Try shallow clone by tag/branch (fast, stable for release tags)
+# 2) Fallback to full clone + checkout for commit hashes or unusual refs
 RUN set -eux; \
-  git init .; \
-  git remote add origin "${COMFYUI_REPO}"; \
-  \
-  # 1) Try "peeled" tag commit (works for annotated & lightweight tags)
-  if git fetch --depth 1 origin "refs/tags/${COMFYUI_REF}^{ }"; then \
-    git checkout --detach FETCH_HEAD; \
-  elif git fetch --depth 1 origin "refs/tags/${COMFYUI_REF}^{}"; then \
-    git checkout --detach FETCH_HEAD; \
-  \
-  # 2) Try lightweight tag refspec
-  elif git fetch --depth 1 origin "refs/tags/${COMFYUI_REF}:refs/tags/${COMFYUI_REF}"; then \
-    git checkout --detach FETCH_HEAD; \
-  \
-  # 3) Try branch
-  elif git fetch --depth 1 origin "refs/heads/${COMFYUI_REF}:refs/remotes/origin/${COMFYUI_REF}"; then \
-    git checkout --detach FETCH_HEAD; \
-  \
-  # 4) Fallback: full fetch (for commit hashes or unusual refs)
+  rm -rf /opt/ComfyUI; \
+  if git clone --depth 1 --branch "${COMFYUI_REF}" "${COMFYUI_REPO}" /opt/ComfyUI; then \
+    echo "cloned by branch/tag: ${COMFYUI_REF}"; \
   else \
+    echo "shallow clone failed, fallback to full clone"; \
+    rm -rf /opt/ComfyUI; \
+    git clone "${COMFYUI_REPO}" /opt/ComfyUI; \
+    cd /opt/ComfyUI; \
     git fetch --all --tags; \
     git checkout --detach "${COMFYUI_REF}"; \
   fi; \
-  rm -rf .git
+  rm -rf /opt/ComfyUI/.git
 
-# Optional: keep pip tooling updated (safe, small)
+WORKDIR /opt/ComfyUI
+
+# Keep pip tooling updated
 RUN pip install --no-cache-dir -U pip setuptools wheel
 
 # Install python deps (CPU baseline)
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Ensure runtime directories exist and remain external via bind mounts
+# Runtime directories (bind mounts recommended)
 RUN mkdir -p /opt/ComfyUI/models /opt/ComfyUI/input /opt/ComfyUI/output \
-  /opt/ComfyUI/custom_nodes /opt/ComfyUI/workflows \
-  && chown -R app:app /opt/ComfyUI
-
-USER app
+  /opt/ComfyUI/custom_nodes /opt/ComfyUI/workflows
 
 EXPOSE 8188
 
