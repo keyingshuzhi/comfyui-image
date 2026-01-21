@@ -5,6 +5,16 @@ services:
     # 安全建议：本机使用只绑定到 127.0.0.1
     ports:
       - "127.0.0.1:8188:8188"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     # Runtime data stays on the host so image upgrades do not overwrite it.
     volumes:
       - ./runtime/models:/opt/ComfyUI/models
