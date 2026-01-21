@@ -9,6 +9,16 @@ if [ -z "${IMAGE_UNDER_TEST:-}" ]; then
   exit 2
 fi
 
+GPU_ARGS=()
+if [ "${HEALTHCHECK_GPU:-}" = "1" ]; then
+  GPU_ARGS+=(--gpus all)
+fi
+
+ENV_ARGS=()
+if [ -n "${COMFYUI_FORCE_CPU:-}" ]; then
+  ENV_ARGS+=(-e "COMFYUI_FORCE_CPU=${COMFYUI_FORCE_CPU}")
+fi
+
 echo "[healthcheck] starting container ${NAME} on port ${PORT} using image ${IMAGE_UNDER_TEST} ..."
 
 # Cleanup any previous container with same name
@@ -18,6 +28,8 @@ docker rm -f "${NAME}" >/dev/null 2>&1 || true
 if ! docker run -d \
   --name "${NAME}" \
   -p "127.0.0.1:${PORT}:8188" \
+  "${GPU_ARGS[@]}" \
+  "${ENV_ARGS[@]}" \
   "${IMAGE_UNDER_TEST}" >/dev/null; then
   echo "[healthcheck] FAILED: docker run failed"
   exit 1

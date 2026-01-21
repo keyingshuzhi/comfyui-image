@@ -4,7 +4,7 @@ Build reproducible Docker images for **ComfyUI** from upstream tags/commits, wit
 
 ## What this repo does
 - Builds ComfyUI from an upstream git ref (`COMFYUI_REF`)
-- Produces a runtime image (CPU baseline)
+- Produces a runtime image (GPU baseline, CUDA 12.x)
 - Runs a smoke test (UI endpoint reachable)
 - Publishes to `${REGISTRY}/${IMAGE_PREFIX}/${IMAGE_REPO}:<tag>` and optionally `:stable`
 
@@ -17,20 +17,30 @@ For delivery and team usage, we need:
 ## Quick start (local)
 ```bash
 make smoke COMFYUI_REF=v0.9.2 IMAGE=comfyui-local
-docker run --rm -p 8188:8188 comfyui-local
+docker run --rm --gpus all -p 8188:8188 comfyui-local
+# No GPU runtime? add: -e COMFYUI_FORCE_CPU=1
 # open http://localhost:8188
 ```
 
+## GPU requirements
+- NVIDIA driver >= 530 and `nvidia-container-toolkit` (CUDA 12.1, RTX 40xx/4080+)
+- Start containers with `--gpus all` or compose device requests
+- Set `COMFYUI_FORCE_CPU=1` to force CPU mode
+
 ## Upstream source
-- Default repo: `https://github.com/comfyanonymous/ComfyUI.git`
+- Default repo: `https://github.com/Comfy-Org/ComfyUI.git`
 - Override with `COMFYUI_REPO` (Makefile) or the `comfyui_repo` workflow input
 
 ## Base image (mirror support)
 If Docker Hub is not reachable, override the base image to your mirror:
 ```bash
-make build BASE_IMAGE=registry.example.com/library/python:3.12-slim
+make build BASE_IMAGE=registry.example.com/nvidia/cuda:12.1.1-runtime-ubuntu22.04
 ```
 CI: set repo variable `BASE_IMAGE` or use the `base_image` workflow input.
+To swap PyTorch CUDA wheels:
+```bash
+make build TORCH_INDEX_URL=https://download.pytorch.org/whl/cu124
+```
 
 ## Third-party registry (CI publish)
 This repo supports publishing to a custom registry (Harbor, Aliyun, etc.).
@@ -39,7 +49,7 @@ This repo supports publishing to a custom registry (Harbor, Aliyun, etc.).
 - Optional `workflow_dispatch` overrides: `registry`, `image_prefix`, `image_repo`
 
 ## Runtime data (volumes)
-`compose/docker-compose.yml.example` keeps `models`, `input`, and `output` on the host. Updating image tags will not overwrite those bind-mounted directories. Configure the image with:
+`compose/docker-compose.yml.example` keeps `models`, `input`, and `output` on the host and requests GPU access. Updating image tags will not overwrite those bind-mounted directories. Configure the image with:
 ```bash
 COMFYUI_IMAGE=ghcr.io/keyingshuzhi/comfyui:stable
 ```

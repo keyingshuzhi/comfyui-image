@@ -1,12 +1,13 @@
-# comfyui-image: CPU baseline (mac/docker friendly)
+# comfyui-image: GPU runtime (CUDA 12.x, Ada/4080+ ready)
 # - Builds ComfyUI from an upstream tag/commit (COMFYUI_REF)
 # - Keeps runtime minimal; models/nodes/workflows are mounted via volumes
 
-ARG BASE_IMAGE=python:3.11-slim
+ARG BASE_IMAGE=nvidia/cuda:12.1.1-runtime-ubuntu22.04
 FROM ${BASE_IMAGE}
 
 ARG COMFYUI_REF=v0.9.2
 ARG COMFYUI_REPO=https://github.com/Comfy-Org/ComfyUI.git
+ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cu121
 
 LABEL org.opencontainers.image.source="https://github.com/keyingshuzhi/comfyui-image"
 
@@ -17,12 +18,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
     ca-certificates \
+    python3 \
+    python3-pip \
+    python3-venv \
   && rm -rf /var/lib/apt/lists/*
 
 # Non-root user
 RUN useradd -m -u 1000 app \
   && mkdir -p /opt \
   && chown -R app:app /opt
+
+COPY docker/entrypoint.sh /opt/entrypoint.sh
+RUN chmod +x /opt/entrypoint.sh
 
 USER app
 WORKDIR /opt
@@ -45,14 +52,14 @@ RUN set -eux; \
 WORKDIR /opt/ComfyUI
 
 # Keep pip tooling updated
-RUN pip install --no-cache-dir -U pip setuptools wheel
+RUN python3 -m pip install --no-cache-dir -U pip setuptools wheel
 
-# IMPORTANT: Install CPU-only PyTorch first (prevents pulling CUDA/nvidia wheels)
-RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu \
+# Install CUDA-enabled PyTorch first (Ada/4080+ compatible)
+RUN python3 -m pip install --no-cache-dir --index-url "${TORCH_INDEX_URL}" \
     torch torchvision torchaudio
 
-# Install ComfyUI deps (should reuse the already-installed CPU torch)
-RUN pip install --no-cache-dir -r requirements.txt
+# Install ComfyUI deps (should reuse the already-installed torch)
+RUN python3 -m pip install --no-cache-dir -r requirements.txt
 
 # Runtime directories (bind mounts recommended)
 RUN mkdir -p /opt/ComfyUI/models /opt/ComfyUI/input /opt/ComfyUI/output \
@@ -60,4 +67,4 @@ RUN mkdir -p /opt/ComfyUI/models /opt/ComfyUI/input /opt/ComfyUI/output \
 
 EXPOSE 8188
 
-CMD ["python", "main.py", "--cpu", "--listen", "--port", "8188"]
+ENTRYPOINT ["/opt/entrypoint.sh"]
